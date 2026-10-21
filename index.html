@@ -156,7 +156,7 @@
 <div class="screen" id="screen-lobby">
   <div class="topline">
     <div class="brandrow"><img src="desktop/icon.png" alt=""><h1>ВИДЕО<span class="acc">ЧАТ</span></h1></div>
-    <div class="who"><span id="who-name"></span> · <button class="link" id="btn-logout">Выйти</button></div>
+    <div class="who"><span id="who-name"></span><span id="who-out"> · <button class="link" id="btn-logout">Выйти</button></span></div>
   </div>
   <div class="card lobby-box">
     <h2>Мои комнаты</h2>
@@ -235,6 +235,17 @@
   const $ = (id) => document.getElementById(id);
   const tg = window.Telegram && window.Telegram.WebApp;
   const tgUser = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
+  // Внутри Telegram Mini App: сообщаем Телеграму, что страница готова, раскрываем на весь экран и красим шапку
+  // в цвет фона. Вне Телеграма (браузер, Electron) tg.initData пуст и всё это пропускается.
+  const inTelegram = !!(tg && tg.initData);
+  if (inTelegram) {
+    try { tg.ready(); tg.expand(); tg.setHeaderColor('#17212b'); tg.setBackgroundColor('#0e1621'); } catch (e) {}
+  }
+  function setCloseGuard(on) {
+    // пока человек в комнате, случайный свайп вниз не должен закрывать приложение
+    if (!inTelegram) return;
+    try { if (on) tg.enableClosingConfirmation(); else tg.disableClosingConfirmation(); } catch (e) {}
+  }
   const ls = {
     get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
     set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
@@ -413,7 +424,7 @@
       leaveRoom(true);
       $('blocked-title').textContent = b.title;
       $('blocked-text').textContent = b.text;
-      $('btn-blocked-logout').style.display = b.logout ? 'block' : 'none';
+      $('btn-blocked-logout').style.display = (b.logout && !tgUser) ? 'block' : 'none'; // в Telegram выход ничего бы не изменил
       $('btn-blocked-back').style.display = 'none';
       showScreen('screen-blocked');
     } else if (blockedShown) {
@@ -559,6 +570,7 @@
       mutes = {}; bans = {}; votes = {};
       db.ref('users/' + myId + '/vcJoined/' + cid).set(Date.now()).catch(() => {});
       showScreen('screen-room');
+      setCloseGuard(true);
       $('room-title').textContent = title;
       $('chat-log').innerHTML = '';
       $('grid').innerHTML = '';
@@ -937,6 +949,7 @@
     peers.clear();
     $('grid').innerHTML = '';
     cid = null;
+    setCloseGuard(false);
     if (!silent && r && !blockedShown) goLobby();
   }
 
@@ -955,6 +968,7 @@
       return;
     }
     $('who-name').textContent = (me.firstName || 'Игрок') + ' · ' + (me.playerId || '');
+    if (tgUser) $('who-out').style.display = 'none'; // в Telegram аккаунт определяется самим Телеграмом — выходить некуда
     watchSession();
     if (!me.videochatAccepted) {
       await new Promise((resolve) => {
@@ -966,8 +980,9 @@
     }
     if (platformBlock()) { enforcePlatform(); return; }
     goLobby();
-    // ссылка из чата: ?room=<ключ комнаты>
-    const want = new URLSearchParams(location.search).get('room');
+    // ссылка из чата: ?room=<ключ комнаты>, а внутри Telegram Mini App — параметр startapp (его кладёт бот
+    // в ссылку t.me/<бот>/<приложение>?startapp=<ключ комнаты>)
+    const want = new URLSearchParams(location.search).get('room') || (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) || '';
     if (want && ID_RE.test(want)) enterRoom(want);
   }
   window.addEventListener('beforeunload', () => { if (myId && cid) db.ref('videochat/roomState/' + cid + '/online/' + myId).remove(); });
