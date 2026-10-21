@@ -409,7 +409,22 @@
     const authUid = await anonymousAuthUid();
     const updates = { ['users/' + id]: fresh };
     if (authUid) updates['owners/' + id] = authUid;
-    await db.ref().update(updates);
+    try {
+      await db.ref().update(updates);
+    } catch (err) {
+      // отказ: профиль мог только что создать игра, либо остался «хвост» owners/<id> от удалённого профиля (так бывает у гостя,
+      // которого вычистила ночная уборка панели) — тогда гостю просто заводим новый id, а не оставляем его в тупике
+      const again = await db.ref('users/' + id).once('value');
+      if (again.exists()) return again.val();
+      if (/^guest_/.test(id)) {
+        const g = 'guest_' + Math.random().toString(36).slice(2, 9);
+        ls.set('vcGuestId', g);
+        ls.set('battleTelegramId', g);
+        location.reload();
+        return new Promise(() => {});
+      }
+      throw err;
+    }
     // индекс «@username → id» пишем, только если ключ свободен
     if (tgUser && tgUser.username) {
       const ukey = usernameToKey(tgUser.username);
@@ -978,8 +993,13 @@
       myBan = (await db.ref('videochat/bans/' + myId).once('value')).val();
     } catch (err) {
       console.error(err);
-      $('blocked-title').textContent = 'НЕТ СВЯЗИ';
-      $('blocked-text').textContent = 'Не удалось связаться с сервером: ' + (err.message || err);
+      $('blocked-title').textContent = 'НЕ ПОЛУЧИЛОСЬ';
+      $('blocked-text').textContent = 'Не удалось войти: ' + (err.message || err);
+      // выход из тупика: «Повторить» и «Выйти» (сменить аккаунт)
+      $('btn-blocked-back').textContent = 'Повторить';
+      $('btn-blocked-back').style.display = 'block';
+      $('btn-blocked-back').onclick = () => location.reload();
+      $('btn-blocked-logout').style.display = tgUser ? 'none' : 'block';
       showScreen('screen-blocked');
       return;
     }
