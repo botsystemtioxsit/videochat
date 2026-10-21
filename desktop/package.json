@@ -1,6 +1,6 @@
 {
   "name": "videochat-desktop",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Десктоп-приложение (Electron) для ВидеоЧата — окно, которое открывает живую страницу без браузера.",
   "author": {
@@ -35,13 +35,19 @@
       "package.json"
     ],
     "linux": {
-      "target": ["AppImage", "deb", "tar.gz"],
+      "target": [
+        "AppImage",
+        "deb",
+        "tar.gz"
+      ],
       "category": "Network",
       "icon": "icon.png",
       "artifactName": "${name}-${version}-${arch}.${ext}"
     },
     "win": {
-      "target": ["nsis"],
+      "target": [
+        "nsis"
+      ],
       "icon": "icon.ico"
     },
     "nsis": {
