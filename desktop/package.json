@@ -1,0 +1,53 @@
+{
+  "name": "videochat-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Десктоп-приложение (Electron) для ВидеоЧата — окно, которое открывает живую страницу без браузера.",
+  "author": {
+    "name": "botsystemtioxsit",
+    "email": "botsystemtioxsit@users.noreply.github.com"
+  },
+  "homepage": "https://github.com/botsystemtioxsit/videochat",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:linux": "electron-builder --linux",
+    "build:win": "electron-builder --win"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.tioxsit.videochat",
+    "productName": "ВидеоЧат",
+    "publish": {
+      "provider": "github",
+      "owner": "botsystemtioxsit",
+      "repo": "videochat",
+      "releaseType": "release"
+    },
+    "files": [
+      "main.js",
+      "package.json"
+    ],
+    "linux": {
+      "target": ["AppImage", "deb", "tar.gz"],
+      "category": "Network",
+      "icon": "icon.png",
+      "artifactName": "${name}-${version}-${arch}.${ext}"
+    },
+    "win": {
+      "target": ["nsis"],
+      "icon": "icon.ico"
+    },
+    "nsis": {
+      "installerIcon": "icon.ico",
+      "uninstallerIcon": "icon.ico",
+      "installerHeaderIcon": "icon.ico"
+    }
+  }
+}

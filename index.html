@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<title>ВидеоЧат</title>
+<link rel="icon" href="desktop/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* Та же палитра, что у «Тролль-Баттла» и админ-панели */
+  :root{
+    --bg:#0B0B0D; --panel:#17171B; --panel-2:#1F1F24; --line:#2A2A30;
+    --text:#F2F1EE; --muted:#8A8A92; --live:#FF3D2E; --gold:#F2B705;
+    --live-rgb:255,61,46; --gold-rgb:242,183,5;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html,body{ background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; height:100%; -webkit-font-smoothing:antialiased; }
+  body{ overflow:hidden; }
+  .screen{ display:none; position:absolute; inset:0; overflow-y:auto; }
+  .screen.active{ display:flex; }
+  .center{ align-items:center; justify-content:center; flex-direction:column; padding:20px;
+    background:radial-gradient(120% 60% at 50% -10%, rgba(var(--live-rgb),0.14), transparent 60%), var(--bg); }
+  .card{ width:100%; max-width:420px; background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:22px; }
+  h1{ font-family:'Bebas Neue',sans-serif; font-weight:400; letter-spacing:1px; font-size:38px; line-height:1; }
+  h1 .acc{ color:var(--live); }
+  .sub{ color:var(--muted); font-size:13.5px; margin-top:8px; line-height:1.45; }
+  input[type=text]{ width:100%; background:var(--panel-2); border:1px solid var(--line); color:var(--text);
+    border-radius:12px; padding:13px 14px; font:inherit; font-size:15px; outline:none; margin-top:14px; }
+  input[type=text]:focus{ border-color:var(--gold); }
+  .btn{ display:block; width:100%; border:0; border-radius:12px; padding:14px; margin-top:12px; font:inherit; font-weight:700;
+    font-size:15px; cursor:pointer; background:var(--live); color:#fff; }
+  .btn:disabled{ opacity:.55; cursor:default; }
+  .btn.line{ background:transparent; border:1px solid var(--line); color:var(--text); }
+  .btn.gold{ background:var(--gold); color:#111; }
+  .msg{ font-size:13px; margin-top:12px; color:var(--muted); line-height:1.4; display:none; }
+  .msg.err{ color:var(--live); }
+  .link{ color:var(--muted); font-size:12.5px; text-decoration:underline; cursor:pointer; background:none; border:0; font-family:inherit; }
+  label.check{ display:flex; gap:10px; align-items:flex-start; margin-top:14px; font-size:13.5px; color:var(--text); line-height:1.4; cursor:pointer; }
+  label.check input{ margin-top:3px; accent-color:var(--live); width:17px; height:17px; flex-shrink:0; }
+
+  /* лобби */
+  #screen-lobby{ flex-direction:column; align-items:center; padding:18px; gap:14px;
+    background:radial-gradient(120% 60% at 50% -10%, rgba(var(--live-rgb),0.14), transparent 60%), var(--bg); }
+  .topline{ width:100%; max-width:560px; display:flex; justify-content:space-between; align-items:center; }
+  .who{ font-size:13px; color:var(--muted); }
+  .who b{ color:var(--text); font-weight:600; }
+  .preview{ width:100%; max-width:560px; aspect-ratio:4/3; background:#000; border:1px solid var(--line); border-radius:18px; overflow:hidden; position:relative; }
+  .preview video{ width:100%; height:100%; object-fit:cover; transform:scaleX(-1); }
+  .preview .ph{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:14px; text-align:center; padding:20px; }
+  .stats{ display:flex; gap:18px; color:var(--muted); font-size:13px; }
+  .stats b{ color:var(--text); }
+  .dot{ display:inline-block; width:8px; height:8px; border-radius:50%; background:#3ddc84; margin-right:6px; }
+  .lobby-actions{ width:100%; max-width:560px; }
+
+  /* звонок */
+  #screen-call{ flex-direction:row; background:#000; }
+  .stage{ flex:1; position:relative; min-width:0; background:#000; }
+  #remote-video{ width:100%; height:100%; object-fit:contain; background:#000; }
+  #local-video{ position:absolute; right:14px; top:14px; width:min(28vw,190px); aspect-ratio:4/3; object-fit:cover; background:#111;
+    border:1px solid var(--line); border-radius:12px; transform:scaleX(-1); z-index:3; }
+  .overlay-msg{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:10px; text-align:center;
+    font-size:17px; padding:30px; z-index:2; background:rgba(11,11,13,.82); }
+  .overlay-msg .spin{ width:34px; height:34px; border-radius:50%; border:3px solid var(--line); border-top-color:var(--live); animation:spin 1s linear infinite; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .controls{ position:absolute; left:0; right:0; bottom:16px; display:flex; justify-content:center; gap:10px; z-index:4; flex-wrap:wrap; padding:0 10px; }
+  .cbtn{ border:1px solid var(--line); background:rgba(23,23,27,.92); color:var(--text); border-radius:100px; padding:12px 18px; font:inherit; font-weight:600;
+    font-size:14px; cursor:pointer; }
+  .cbtn.off{ background:var(--live); border-color:var(--live); color:#fff; }
+  .cbtn.next{ background:var(--gold); color:#111; border-color:var(--gold); }
+  .cbtn.stop{ background:var(--live); border-color:var(--live); color:#fff; }
+  .chat{ width:300px; border-left:1px solid var(--line); background:var(--panel); display:flex; flex-direction:column; }
+  .chat-log{ flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:6px; }
+  .bubble{ max-width:88%; padding:8px 11px; border-radius:12px; font-size:13.5px; line-height:1.35; word-break:break-word; background:var(--panel-2); align-self:flex-start; }
+  .bubble.me{ background:rgba(var(--live-rgb),.22); align-self:flex-end; }
+  .chat form{ display:flex; gap:8px; padding:10px; border-top:1px solid var(--line); }
+  .chat input{ margin-top:0; padding:10px 12px; }
+  .chat button{ border:0; background:var(--gold); color:#111; border-radius:10px; padding:0 14px; font-weight:700; cursor:pointer; }
+  @media (max-width:760px){
+    #screen-call{ flex-direction:column; }
+    .chat{ width:100%; height:32%; border-left:0; border-top:1px solid var(--line); }
+    .controls{ bottom:10px; }
+    .cbtn{ padding:10px 13px; font-size:13px; }
+  }
+
+  /* окно жалобы */
+  .modal{ position:fixed; inset:0; background:rgba(0,0,0,.7); display:none; align-items:center; justify-content:center; z-index:50; padding:20px; }
+  .modal.open{ display:flex; }
+  .reason{ display:block; width:100%; text-align:left; background:var(--panel-2); border:1px solid var(--line); color:var(--text); border-radius:12px;
+    padding:13px 14px; margin-top:8px; font:inherit; font-size:14.5px; cursor:pointer; }
+  .reason:hover{ border-color:var(--gold); }
+  .toast{ position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:var(--panel); border:1px solid var(--line); border-radius:100px;
+    padding:10px 18px; font-size:13.5px; z-index:60; display:none; max-width:90vw; text-align:center; }
+</style>
+</head>
+<body>
+
+<!-- загрузка -->
+<div class="screen center active" id="screen-boot"><h1>ВИДЕО<span class="acc">ЧАТ</span></h1><div class="sub">Загрузка…</div></div>
+
+<!-- вход -->
+<div class="screen center" id="screen-login">
+  <div class="card">
+    <h1>ВИДЕО<span class="acc">ЧАТ</span></h1>
+    <div class="sub">Случайные видеоразговоры. Аккаунт — тот же, что в «Тролль-Баттле».</div>
+    <input type="text" id="login-input" placeholder="Почта, @username или ID аккаунта" autocomplete="off">
+    <button class="btn" id="btn-login">Запросить вход</button>
+    <div class="msg" id="login-msg"></div>
+    <button class="btn line" id="btn-guest">Продолжить гостем</button>
+    <div class="sub" style="font-size:12px;">Вход подтверждается кнопкой «Разрешить» в сообщении Telegram-бота или в игре (Сообщество → Запросы).</div>
+  </div>
+</div>
+
+<!-- правила -->
+<div class="screen center" id="screen-gate">
+  <div class="card">
+    <h1>ПРАВИЛА</h1>
+    <div class="sub" style="line-height:1.55;">
+      Здесь разговаривают со случайными людьми по видео. Нельзя: показывать обнажённое тело, оскорблять и унижать,
+      рекламировать, угрожать, снимать и записывать собеседника. На нарушителя можно пожаловаться кнопкой «Жалоба» —
+      администрация видит жалобы и может заблокировать.
+    </div>
+    <label class="check"><input type="checkbox" id="gate-age"> <span>Мне исполнилось 18 лет</span></label>
+    <label class="check"><input type="checkbox" id="gate-rules"> <span>Я прочитал(а) правила и согласен(на) их соблюдать</span></label>
+    <button class="btn" id="btn-gate" disabled>Продолжить</button>
+  </div>
+</div>
+
+<!-- блокировка / обслуживание -->
+<div class="screen center" id="screen-blocked">
+  <div class="card">
+    <h1 id="blocked-title">ДОСТУП ЗАКРЫТ</h1>
+    <div class="sub" id="blocked-text"></div>
+    <button class="btn line" id="btn-blocked-logout" style="display:none;">Выйти из аккаунта</button>
+  </div>
+</div>
+
+<!-- лобби -->
+<div class="screen" id="screen-lobby">
+  <div class="topline">
+    <h1>ВИДЕО<span class="acc">ЧАТ</span></h1>
+    <div class="who"><span id="who-name"></span> · <button class="link" id="btn-logout">Выйти</button></div>
+  </div>
+  <div class="preview">
+    <video id="preview-video" autoplay muted playsinline></video>
+    <div class="ph" id="preview-ph">Нажми «Найти собеседника» — браузер попросит доступ к камере и микрофону</div>
+  </div>
+  <div class="stats"><span><span class="dot"></span>онлайн <b id="stat-online">0</b></span><span>ищут собеседника <b id="stat-queue">0</b></span></div>
+  <div class="lobby-actions">
+    <button class="btn" id="btn-find">Найти собеседника</button>
+    <div class="msg" id="lobby-msg"></div>
+  </div>
+</div>
+
+<!-- разговор -->
+<div class="screen" id="screen-call">
+  <div class="stage">
+    <video id="remote-video" autoplay playsinline></video>
+    <video id="local-video" autoplay muted playsinline></video>
+    <div class="overlay-msg" id="call-overlay"><div class="spin"></div><div id="call-overlay-text">Ищем собеседника…</div></div>
+    <div class="controls">
+      <button class="cbtn" id="btn-mic">🎤 Микрофон</button>
+      <button class="cbtn" id="btn-cam">📷 Камера</button>
+      <button class="cbtn" id="btn-sound" style="display:none;">🔊 Включить звук</button>
+      <button class="cbtn" id="btn-report">⚠ Жалоба</button>
+      <button class="cbtn next" id="btn-next">Дальше ⏭</button>
+      <button class="cbtn stop" id="btn-stop">Выйти</button>
+    </div>
+  </div>
+  <div class="chat" id="chat-box">
+    <div class="chat-log" id="chat-log"></div>
+    <form id="chat-form"><input type="text" id="chat-input" maxlength="300" placeholder="Сообщение…" autocomplete="off"><button type="submit">➤</button></form>
+  </div>
+</div>
+
+<!-- жалоба -->
+<div class="modal" id="modal-report">
+  <div class="card">
+    <h1>ЖАЛОБА</h1>
+    <div class="sub">Что нарушил собеседник? Мы пришлём жалобу администрации и сразу найдём вам следующего.</div>
+    <button class="reason" data-reason="Обнажённое тело / 18+">Обнажённое тело / 18+</button>
+    <button class="reason" data-reason="Оскорбления и угрозы">Оскорбления и угрозы</button>
+    <button class="reason" data-reason="Реклама / спам">Реклама / спам</button>
+    <button class="reason" data-reason="Другое нарушение">Другое нарушение</button>
+    <button class="btn line" id="btn-report-cancel">Отмена</button>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  // ===== Firebase: тот же проект, что у игры и админ-панели (публичный клиентский конфиг) =====
+  firebase.initializeApp({
+    apiKey: "AIzaSyBe2eSG48yzv_9r6Q5yUF7fe2b6YLQGuQg",
+    authDomain: "zolotaya-kletka.firebaseapp.com",
+    databaseURL: "https://zolotaya-kletka-default-rtdb.firebaseio.com",
+    projectId: "zolotaya-kletka",
+    storageBucket: "zolotaya-kletka.firebasestorage.app",
+    messagingSenderId: "570732456851",
+    appId: "1:570732456851:web:1a5e2ec46f5abf0e22d666"
+  });
+  const db = firebase.database();
+  const TS = firebase.database.ServerValue.TIMESTAMP;
+
+  // Голос и видео — LiveKit через sandbox token server (тот же, что у игры; для пре-альфы,
+  // для продакшена LiveKit советует свой сервер токенов). Комнаты видеочата называются vc-<id>.
+  const LIVEKIT_TOKEN_SERVER_ID = 'zolotayakletka-27g1yr';
+  const GATEWAY_URL = 'https://battle-role-gateway.tioxsit.workers.dev';
+  const NOSHOW_MS = 20000;   // собеседник нашёлся, но в комнату не пришёл
+  const SEARCH_TICK_MS = 3000;
+
+  const $ = (id) => document.getElementById(id);
+  const tg = window.Telegram && window.Telegram.WebApp;
+  const tgUser = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
+  const ls = {
+    get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+    del(k) { try { localStorage.removeItem(k); } catch (e) {} }
+  };
+
+  function showScreen(id) {
+    document.querySelectorAll('.screen').forEach((s) => s.classList.remove('active'));
+    $(id).classList.add('active');
+  }
+  let toastTimer = null;
+  function toast(text) {
+    const el = $('toast');
+    el.textContent = text;
+    el.style.display = 'block';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { el.style.display = 'none'; }, 3500);
+  }
+  function setMsg(el, text, isErr) {
+    el.style.display = text ? 'block' : 'none';
+    el.textContent = text || '';
+    el.classList.toggle('err', !!isErr);
+  }
+
+  // ===== кто я =====
+  let myId = null;
+  let me = null;           // users/<id>
+  let myBan = null;        // videochat/bans/<id>
+  const detachers = [];    // слушатели на всё время сессии
+
+  function detectDevice() {
+    const ua = navigator.userAgent;
+    if (/Electron\//.test(ua)) return 'Приложение для компьютера';
+    if (/YaBrowser/.test(ua)) return 'Яндекс.Браузер';
+    if (/EdgA?\//.test(ua)) return 'Edge';
+    if (/OPR\//.test(ua)) return 'Opera';
+    if (/Firefox\//.test(ua)) return 'Firefox';
+    if (/Chrome\//.test(ua)) return 'Chrome';
+    if (/Safari\//.test(ua)) return 'Safari';
+    return 'браузер';
+  }
+  function emailToKey(email) { return email.trim().toLowerCase().replace(/\./g, ','); }
+  function usernameToKey(u) { return u.trim().replace(/^@/, '').toLowerCase(); }
+  function generatePlayerId() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+    return 'PLR-' + code;
+  }
+  const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+
+  function resolveIdentity() {
+    if (tgUser) return String(tgUser.id);
+    const saved = ls.get('battleTelegramId'); // общий с игрой и админ-панелью ключ входа
+    if (saved && ID_RE.test(saved)) return saved;
+    return null;
+  }
+
+  // ===== вход по заявке (как в игре: без Firebase Auth и без писем) =====
+  let loginWatch = null;
+  function stopLoginWatch() {
+    if (!loginWatch) return;
+    db.ref(loginWatch.path).off('value', loginWatch.cb);
+    clearTimeout(loginWatch.timer);
+    loginWatch = null;
+  }
+  function loginFail(text) {
+    setMsg($('login-msg'), text, true);
+    $('btn-login').disabled = false;
+    $('btn-login').textContent = 'Запросить вход';
+  }
+  async function requestLogin() {
+    const raw = $('login-input').value.trim();
+    if (!raw) { setMsg($('login-msg'), 'Впиши почту, @username или ID аккаунта', true); return; }
+    stopLoginWatch();
+    const btn = $('btn-login');
+    btn.disabled = true;
+    btn.textContent = 'Ищем аккаунт…';
+    setMsg($('login-msg'), '');
+    try {
+      let target;
+      if (raw.includes('@') && !raw.startsWith('@')) {
+        target = (await db.ref('emailLogins/' + emailToKey(raw)).once('value')).val();
+        if (!target) return loginFail('Эта почта не привязана ни к одному аккаунту.');
+      } else if (/^\d+$/.test(raw)) {
+        target = raw;
+      } else {
+        const key = usernameToKey(raw);
+        if (!/^[a-z0-9_]{1,64}$/.test(key)) return loginFail('Такой username не найден.');
+        target = (await db.ref('usernames/' + key).once('value')).val();
+        if (!target) return loginFail('Такой username не найден — аккаунт ещё ни разу не заходил в игру через Telegram.');
+      }
+      if (!ID_RE.test(String(target)) || !(await db.ref('users/' + target + '/role').once('value')).exists()) {
+        return loginFail('Аккаунт не найден.');
+      }
+      btn.textContent = 'Отправляем заявку…';
+      const reqRef = db.ref('users/' + target + '/loginRequests').push();
+      await reqRef.set({ device: detectDevice(), app: 'videochat', requestedAt: Date.now(), status: 'pending' });
+      const path = 'users/' + target + '/loginRequests/' + reqRef.key;
+      // бот напишет владельцу аккаунта в Telegram с кнопками «Разрешить / Отклонить»; не вышло — не страшно,
+      // заявку видно в игре (Сообщество → Запросы) и в админ-панели (Аккаунт)
+      fetch(GATEWAY_URL + '/login-notify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ telegramId: String(target), requestId: reqRef.key }) }).catch(() => {});
+      setMsg($('login-msg'), '⏳ Заявка отправлена — подтверди её кнопкой «Разрешить» в Telegram-боте или в игре на устройстве, где ты уже вошёл.');
+      btn.textContent = 'Ждём подтверждения…';
+      const cb = db.ref(path).on('value', (snap) => {
+        const v = snap.val();
+        if (!v || v.status === 'pending') return;
+        db.ref(path).remove().catch(() => {});
+        stopLoginWatch();
+        if (v.status === 'approved') {
+          ls.set('battleTelegramId', String(target));
+          setMsg($('login-msg'), '✅ Вход разрешён…');
+          setTimeout(() => location.reload(), 500);
+        } else {
+          loginFail('Отклонено на другом устройстве.');
+        }
+      });
+      loginWatch = {
+        path, cb,
+        timer: setTimeout(() => {
+          db.ref(path).once('value').then((s) => { if (s.val() && s.val().status === 'pending') db.ref(path).remove(); });
+          stopLoginWatch();
+          loginFail('Время ожидания истекло, попробуй ещё раз.');
+        }, 5 * 60 * 1000)
+      };
+    } catch (err) {
+      console.error(err);
+      loginFail('Не удалось отправить запрос: ' + (err.message || err));
+    }
+  }
+  $('btn-login').addEventListener('click', requestLogin);
+  $('login-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') requestLogin(); });
+  $('btn-guest').addEventListener('click', () => {
+    let g = ls.get('vcGuestId');
+    if (!g || !ID_RE.test(g)) { g = 'guest_' + Math.random().toString(36).slice(2, 9); ls.set('vcGuestId', g); }
+    ls.set('battleTelegramId', g);
+    location.reload();
+  });
+  function logout() {
+    ls.del('battleTelegramId');
+    location.reload();
+  }
+  $('btn-logout').addEventListener('click', logout);
+  $('btn-blocked-logout').addEventListener('click', logout);
+
+  // ===== аккаунт: та же запись users/<id>, что у игры =====
+  async function ensureUser(id) {
+    const snap = await db.ref('users/' + id).once('value');
+    if (snap.exists()) return snap.val();
+    const firstName = tgUser ? (tgUser.first_name || 'Игрок') : 'Гость';
+    const fresh = {
+      playerId: generatePlayerId(),
+      firstName,
+      username: tgUser && tgUser.username ? '@' + tgUser.username : null,
+      role: 'user',
+      points: 1000,
+      starsBalance: 0,
+      stats: { battles: 0, wins: 0, losses: 0, draws: 0, refereeBattles: 0, audienceLikes: 0 },
+      avatarData: null,
+      status: 'active',
+      restrictedUntil: null,
+      createdAt: Date.now()
+    };
+    await db.ref('users/' + id).set(fresh);
+    if (tgUser && tgUser.username) db.ref('usernames/' + usernameToKey(tgUser.username)).set(id);
+    return fresh;
+  }
+
+  // Что мешает зайти: блокировка в игре, ограничение по времени или бан именно в видеочате
+  function banReason() {
+    if (me && me.status === 'banned') return { text: 'Аккаунт заблокирован администрацией навсегда.' };
+    if (me && me.status === 'restricted' && me.restrictedUntil > Date.now()) {
+      return { text: 'Доступ ограничен до ' + new Date(me.restrictedUntil).toLocaleString('ru-RU') + '.' };
+    }
+    if (myBan && (!myBan.until || myBan.until > Date.now())) {
+      const when = myBan.until ? 'до ' + new Date(myBan.until).toLocaleString('ru-RU') : 'навсегда';
+      return { text: 'Вы заблокированы в видеочате ' + when + (myBan.reason ? '. Причина: ' + myBan.reason : '.') };
+    }
+    return null;
+  }
+  function showBlocked(title, text, canLogout) {
+    $('blocked-title').textContent = title;
+    $('blocked-text').textContent = text;
+    $('btn-blocked-logout').style.display = canLogout ? 'block' : 'none';
+    showScreen('screen-blocked');
+  }
+
+  // ===== состояние =====
+  // lobby → searching → connecting → incall → (дальше → searching | выйти → lobby)
+  let state = 'boot';
+  let platform = { emergency: false, maintenance: false, message: '' };
+
+  function enforceAccess() {
+    if (!myId) return;
+    if (platform.emergency) {
+      leaveEverything();
+      showBlocked('АВАРИЙНЫЙ РЕЖИМ', platform.message || 'Платформа временно закрыта администрацией.', false);
+      return true;
+    }
+    const staff = me && (me.role === 'moderator' || me.role === 'admin' || me.role === 'superadmin');
+    if (platform.maintenance && !staff) {
+      leaveEverything();
+      showBlocked('ТЕХРАБОТЫ', platform.message || 'Идут технические работы, зайдите позже.', false);
+      return true;
+    }
+    const b = banReason();
+    if (b) {
+      leaveEverything();
+      showBlocked('ВЫ ЗАБЛОКИРОВАНЫ', b.text, true);
+      return true;
+    }
+    if (state === 'blocked') { state = 'lobby'; showScreen('screen-lobby'); }
+    return false;
+  }
+
+  function watchSession() {
+    const track = (ref, ev, cb) => { ref.on(ev, cb); detachers.push(() => ref.off(ev, cb)); };
+    // config читаем флаг за флагом — в нём лежат секреты, целиком его не трогаем
+    ['emergencyLockdown', 'maintenanceMode', 'emergencyMessage', 'maintenanceMessage'].forEach((k) => {
+      track(db.ref('config/' + k), 'value', (s) => {
+        const v = s.val();
+        if (k === 'emergencyLockdown') platform.emergency = !!v;
+        else if (k === 'maintenanceMode') platform.maintenance = !!v;
+        else if (k === 'emergencyMessage') platform.emergencyMessage = typeof v === 'string' ? v : '';
+        else platform.maintenanceMessage = typeof v === 'string' ? v : '';
+        platform.message = platform.emergency ? (platform.emergencyMessage || '') : (platform.maintenanceMessage || '');
+        enforceAccess();
+      });
+    });
+    track(db.ref('videochat/bans/' + myId), 'value', (s) => { myBan = s.val(); enforceAccess(); });
+    track(db.ref('users/' + myId + '/status'), 'value', (s) => { if (me) { me.status = s.val(); enforceAccess(); } });
+    track(db.ref('users/' + myId + '/restrictedUntil'), 'value', (s) => { if (me) { me.restrictedUntil = s.val(); enforceAccess(); } });
+    // «онлайн» видеочата — свой узел, не путаем с игровым presence
+    track(db.ref('.info/connected'), 'value', (s) => {
+      if (s.val() !== true) return;
+      const r = db.ref('videochat/online/' + myId);
+      r.onDisconnect().remove();
+      r.set(true);
+    });
+    track(db.ref('videochat/online'), 'value', (s) => { $('stat-online').textContent = s.numChildren(); });
+    track(db.ref('videochat/queue'), 'value', (s) => { $('stat-queue').textContent = s.numChildren(); });
+  }
+
+  // ===== камера в лобби =====
+  let previewStream = null;
+  let mediaChecked = false;
+  async function startPreview() {
+    if (previewStream) return true;
+    try {
+      previewStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      $('preview-video').srcObject = previewStream;
+      $('preview-ph').style.display = 'none';
+      return true;
+    } catch (err) {
+      setMsg($('lobby-msg'), 'Нет доступа к камере или микрофону. Разреши доступ в настройках и попробуй снова. (' + (err.name || 'ошибка') + ')', true);
+      return false;
+    }
+  }
+  function stopPreview() {
+    if (previewStream) previewStream.getTracks().forEach((t) => t.stop());
+    previewStream = null;
+    $('preview-video').srcObject = null;
+    $('preview-ph').style.display = 'flex';
+  }
+
+  // ===== поиск собеседника =====
+  const Q = 'videochat/queue/';
+  const P = 'videochat/pairs/';
+  let blocked = new Set();
+  try { blocked = new Set(JSON.parse(ls.get('vcBlocked') || '[]').filter((x) => ID_RE.test(x))); } catch (e) {}
+  let searchSession = 0;   // номер поиска: устаревшие асинхронные хвосты сами себя отбрасывают
+  let searchCleanup = [];
+  let matching = false;
+
+  // «Замок» на человека: занять его может только один инициатор за раз. Транзакция «пусто → запись»
+  // (при null всегда возвращаем значение — локальный кэш мог быть ещё пуст, сервер сам перепроверит).
+  // Замок старше LOCK_TTL_MS считается брошенным (инициатор мог закрыть вкладку на полпути).
+  const LOCK_TTL_MS = 15000;
+  function claimLock(uid, room) {
+    const value = { room, by: myId, at: Date.now() };
+    return db.ref('videochat/locks/' + uid)
+      .transaction((cur) => (cur === null || (cur && typeof cur.at === 'number' && Date.now() - cur.at > LOCK_TTL_MS) ? value : undefined), undefined, false)
+      .then((r) => !!(r.committed && r.snapshot.val() && r.snapshot.val().room === room));
+  }
+  function releaseLock(uid, room) {
+    db.ref('videochat/locks/' + uid).transaction((cur) => (cur && cur.room === room ? null : undefined), undefined, false).catch(() => {});
+  }
+
+  async function startSearch() {
+    if (enforceAccess()) return;
+    if (!mediaChecked) {
+      mediaChecked = await startPreview(); // один раз проверяем, что камера и микрофон доступны
+      if (!mediaChecked) { showScreen('screen-lobby'); state = 'lobby'; return; }
+    }
+    stopPreview(); // дальше камерой владеет LiveKit
+    state = 'searching';
+    const session = ++searchSession;
+    resetCallUI();
+    setOverlay('Ищем собеседника…', true);
+    showScreen('screen-call');
+
+    // чистим хвосты прошлых поисков и встаём в очередь
+    await db.ref(P + myId).remove().catch(() => {});
+    const qRef = db.ref(Q + myId);
+    qRef.onDisconnect().remove();
+    db.ref(P + myId).onDisconnect().remove();
+    await qRef.set({ at: TS });
+    if (session !== searchSession) return;
+
+    // 1) меня могут найти — ждём ячейку пары
+    const pairRef = db.ref(P + myId);
+    const pairCb = pairRef.on('value', (s) => {
+      const v = s.val();
+      if (v && v.room && v.peer && session === searchSession && state === 'searching') {
+        pairRef.remove().catch(() => {});
+        beginCall(v.room, v.peer, session);
+      }
+    });
+    searchCleanup.push(() => pairRef.off('value', pairCb));
+
+    // 2) я могу найти кого-то из тех, кто встал в очередь раньше меня
+    const queueRef = db.ref('videochat/queue').orderByChild('at').limitToFirst(25);
+    const queueCb = queueRef.on('value', (s) => tryMatch(s.val() || {}, session));
+    searchCleanup.push(() => queueRef.off('value', queueCb));
+    const tick = setInterval(() => {
+      db.ref('videochat/queue').orderByChild('at').limitToFirst(25).once('value').then((s) => tryMatch(s.val() || {}, session)).catch(() => {});
+    }, SEARCH_TICK_MS);
+    searchCleanup.push(() => clearInterval(tick));
+  }
+
+  function stopSearching() {
+    searchSession++;
+    searchCleanup.forEach((f) => { try { f(); } catch (e) {} });
+    searchCleanup = [];
+    matching = false;
+    if (myId) {
+      db.ref(Q + myId).remove().catch(() => {});
+      db.ref(P + myId).remove().catch(() => {});
+      db.ref(Q + myId).onDisconnect().cancel();
+      db.ref(P + myId).onDisconnect().cancel();
+    }
+  }
+
+  // Инициатором пары становится только тот, кто пришёл ПОЗЖЕ — так двое не могут
+  // одновременно «найти» друг друга. Два замка подряд (сначала на себя — меня ещё никто не забрал?,
+  // потом на кандидата) защищают от гонок: каждого человека за раз может забрать только один.
+  async function tryMatch(queue, session) {
+    if (matching || state !== 'searching' || session !== searchSession) return;
+    const mine = queue[myId];
+    if (!mine || typeof mine.at !== 'number') return;
+    const candidates = Object.entries(queue)
+      .filter(([id, v]) => id !== myId && ID_RE.test(id) && v && typeof v.at === 'number' && !blocked.has(id)
+        && (v.at < mine.at || (v.at === mine.at && id < myId)))
+      .sort((a, b) => a[1].at - b[1].at || (a[0] < b[0] ? -1 : 1));
+    if (!candidates.length) return;
+    matching = true;
+    try {
+      for (const [candId] of candidates) {
+        if (session !== searchSession || state !== 'searching') return;
+        // «призрак» в очереди: не онлайн — пропускаем и чистим
+        const online = (await db.ref('videochat/online/' + candId).once('value')).val();
+        if (!online) { db.ref(Q + candId).remove().catch(() => {}); continue; }
+        const room = db.ref('videochat/rooms').push().key;
+        if (!(await claimLock(myId, room))) return;              // меня уже забрал кто-то другой
+        if (session !== searchSession || state !== 'searching') { releaseLock(myId, room); return; }
+        if (!(await claimLock(candId, room))) { releaseLock(myId, room); continue; }
+        await db.ref().update({
+          ['videochat/rooms/' + room]: { a: myId, b: candId, at: TS },
+          [P + candId]: { room, peer: myId, at: TS }
+        });
+        db.ref(Q + candId).remove().catch(() => {});
+        setTimeout(() => { releaseLock(myId, room); releaseLock(candId, room); }, 5000);
+        if (session === searchSession && state === 'searching') beginCall(room, candId, session);
+        return;
+      }
+    } catch (err) {
+      console.error('match failed', err);
+    } finally {
+      matching = false;
+    }
+  }
+
+  // ===== разговор =====
+  let lkRoom = null;
+  let curRoomId = null;
+  let curPeerId = null;
+  let noShowTimer = null;
+  let micOn = true;
+  let camOn = true;
+  const audioEls = new Set();
+
+  function setOverlay(text, spin) {
+    $('call-overlay-text').textContent = text || '';
+    document.querySelector('#call-overlay .spin').style.display = spin ? 'block' : 'none';
+    $('call-overlay').style.display = text ? 'flex' : 'none';
+  }
+  function resetCallUI() {
+    $('chat-log').innerHTML = '';
+    $('remote-video').srcObject = null;
+    $('local-video').srcObject = null;
+    $('btn-sound').style.display = 'none';
+    micOn = true; camOn = true;
+    $('btn-mic').classList.remove('off');
+    $('btn-cam').classList.remove('off');
+  }
+  function addChat(text, mine) {
+    const b = document.createElement('div');
+    b.className = 'bubble' + (mine ? ' me' : '');
+    b.textContent = text;
+    const log = $('chat-log');
+    log.appendChild(b);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  async function beginCall(roomId, peerId, session) {
+    if (state !== 'searching' || session !== searchSession) return;
+    if (!ID_RE.test(roomId) || !ID_RE.test(peerId)) return;
+    searchCleanup.forEach((f) => { try { f(); } catch (e) {} });
+    searchCleanup = [];
+    db.ref(Q + myId).remove().catch(() => {});
+    db.ref(Q + myId).onDisconnect().cancel();
+    db.ref(P + myId).onDisconnect().cancel();
+    if (blocked.has(peerId)) { toast('Этот собеседник в вашем чёрном списке — ищем другого'); return nextPerson(); }
+
+    state = 'connecting';
+    curRoomId = roomId;
+    curPeerId = peerId;
+    setOverlay('Соединяем…', true);
+    try {
+      const tokenSource = LivekitClient.TokenSource.sandboxTokenServer(LIVEKIT_TOKEN_SERVER_ID);
+      // identity должна быть уникальной — иначе LiveKit сочтёт второе подключение переподключением первого
+      const participantName = 'vc-' + Math.random().toString(36).slice(2, 10);
+      const { serverUrl, participantToken } = await tokenSource.fetch({ roomName: 'vc-' + roomId, participantName });
+      if (state !== 'connecting' || curRoomId !== roomId) return;
+
+      const room = new LivekitClient.Room({ adaptiveStream: true, dynacast: true });
+      lkRoom = room;
+      const E = LivekitClient.RoomEvent;
+      room.on(E.TrackSubscribed, (track) => {
+        if (track.kind === 'video') {
+          track.attach($('remote-video'));
+        } else if (track.kind === 'audio') {
+          const el = track.attach();
+          document.body.appendChild(el);
+          audioEls.add(el);
+        }
+        if (state === 'connecting') { state = 'incall'; setOverlay(''); }
+      });
+      room.on(E.TrackUnsubscribed, (track) => { track.detach().forEach((el) => { audioEls.delete(el); if (el.parentNode === document.body) el.remove(); }); });
+      room.on(E.LocalTrackPublished, (pub) => {
+        if (pub.track && pub.track.kind === 'video') pub.track.attach($('local-video'));
+      });
+      room.on(E.ParticipantConnected, () => { clearTimeout(noShowTimer); noShowTimer = null; });
+      room.on(E.ParticipantDisconnected, () => { if (state === 'incall' || state === 'connecting') peerLeft(); });
+      room.on(E.Disconnected, () => { if (lkRoom === room && (state === 'incall' || state === 'connecting')) peerLeft('Связь потеряна'); });
+      room.on(E.AudioPlaybackStatusChanged, () => { $('btn-sound').style.display = room.canPlaybackAudio ? 'none' : 'inline-block'; });
+      room.on(E.DataReceived, (payload) => {
+        try {
+          const m = JSON.parse(new TextDecoder().decode(payload));
+          if (m && m.t === 'chat' && typeof m.text === 'string') addChat(m.text.slice(0, 300), false);
+        } catch (e) {}
+      });
+
+      await room.connect(serverUrl, participantToken);
+      if (lkRoom !== room || state === 'lobby') { room.disconnect(); return; }
+      await room.localParticipant.setMicrophoneEnabled(true);
+      await room.localParticipant.setCameraEnabled(true);
+
+      if (room.remoteParticipants.size > 0 && state === 'connecting') {
+        setOverlay('Ждём видео собеседника…', true);
+      }
+      // собеседник нашёлся, но не пришёл — вероятно, закрыл вкладку
+      noShowTimer = setTimeout(() => {
+        noShowTimer = null;
+        if (lkRoom === room && room.remoteParticipants.size === 0) peerLeft('Собеседник не подключился');
+      }, NOSHOW_MS);
+    } catch (err) {
+      console.error(err);
+      leaveCall();
+      state = 'lobby';
+      showScreen('screen-lobby');
+      setMsg($('lobby-msg'), 'Не удалось подключиться: ' + (err.message || err), true);
+      startPreview();
+    }
+  }
+
+  // Освобождаем комнату и всё, что с ней связано (но не возвращаем экран)
+  function leaveCall() {
+    clearTimeout(noShowTimer); noShowTimer = null;
+    const room = lkRoom;
+    lkRoom = null;
+    if (room) { try { room.disconnect(); } catch (e) {} }
+    audioEls.forEach((el) => el.remove());
+    audioEls.clear();
+    if (curRoomId) db.ref('videochat/rooms/' + curRoomId).remove().catch(() => {});
+    curRoomId = null;
+    curPeerId = null;
+    $('remote-video').srcObject = null;
+    $('local-video').srcObject = null;
+  }
+  function leaveEverything() {
+    stopSearching();
+    leaveCall();
+    stopPreview();
+    state = 'blocked';
+  }
+
+  function peerLeft(text) {
+    leaveCall();
+    toast(text || 'Собеседник вышел');
+    state = 'searching-pending';
+    setTimeout(() => { if (state === 'searching-pending') { state = 'lobby'; startSearch(); } }, 900);
+  }
+
+  function nextPerson() {
+    stopSearching();
+    leaveCall();
+    state = 'lobby';
+    startSearch();
+  }
+  function stopAll() {
+    stopSearching();
+    leaveCall();
+    state = 'lobby';
+    showScreen('screen-lobby');
+    setMsg($('lobby-msg'), '');
+    startPreview();
+  }
+
+  $('btn-find').addEventListener('click', () => { setMsg($('lobby-msg'), ''); startSearch(); });
+  let nextLock = false;
+  $('btn-next').addEventListener('click', () => {
+    if (nextLock) return;
+    nextLock = true; setTimeout(() => { nextLock = false; }, 1200);
+    nextPerson();
+  });
+  $('btn-stop').addEventListener('click', stopAll);
+  $('btn-mic').addEventListener('click', () => {
+    micOn = !micOn;
+    $('btn-mic').classList.toggle('off', !micOn);
+    if (lkRoom) lkRoom.localParticipant.setMicrophoneEnabled(micOn);
+  });
+  $('btn-cam').addEventListener('click', () => {
+    camOn = !camOn;
+    $('btn-cam').classList.toggle('off', !camOn);
+    if (lkRoom) lkRoom.localParticipant.setCameraEnabled(camOn);
+  });
+  $('btn-sound').addEventListener('click', () => { if (lkRoom) lkRoom.startAudio().then(() => { $('btn-sound').style.display = 'none'; }); });
+
+  $('chat-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const text = $('chat-input').value.trim().slice(0, 300);
+    if (!text || !lkRoom || state !== 'incall') return;
+    $('chat-input').value = '';
+    addChat(text, true);
+    lkRoom.localParticipant.publishData(new TextEncoder().encode(JSON.stringify({ t: 'chat', text })), { reliable: true }).catch(() => {});
+  });
+
+  // ===== жалоба =====
+  $('btn-report').addEventListener('click', () => {
+    if (!curPeerId) { toast('Пока не с кем разговариваете'); return; }
+    $('modal-report').classList.add('open');
+  });
+  $('btn-report-cancel').addEventListener('click', () => $('modal-report').classList.remove('open'));
+  document.querySelectorAll('.reason').forEach((b) => b.addEventListener('click', async () => {
+    $('modal-report').classList.remove('open');
+    const target = curPeerId, room = curRoomId;
+    if (!target) return;
+    try {
+      await db.ref('videochat/reports').push({
+        from: myId, fromName: (me && me.firstName) || '', fromPlayerId: (me && me.playerId) || '',
+        target, room: room || '', reason: b.dataset.reason, createdAt: Date.now(), status: 'new'
+      });
+      blocked.add(target);
+      ls.set('vcBlocked', JSON.stringify([...blocked].slice(-200))); // пожаловался — больше не встретимся
+      toast('Жалоба отправлена');
+    } catch (err) {
+      toast('Не удалось отправить жалобу');
+    }
+    nextPerson();
+  }));
+
+  // ===== правила 18+ (один раз на аккаунт) =====
+  function updateGate() { $('btn-gate').disabled = !($('gate-age').checked && $('gate-rules').checked); }
+  $('gate-age').addEventListener('change', updateGate);
+  $('gate-rules').addEventListener('change', updateGate);
+  function showGate() {
+    return new Promise((resolve) => {
+      showScreen('screen-gate');
+      $('btn-gate').addEventListener('click', () => {
+        const at = Date.now();
+        db.ref('users/' + myId + '/videochatAccepted').set(at).catch(() => {});
+        resolve();
+      }, { once: true });
+    });
+  }
+
+  // ===== старт =====
+  async function boot() {
+    myId = resolveIdentity();
+    if (!myId) { showScreen('screen-login'); return; }
+    try {
+      me = await ensureUser(myId);
+      myBan = (await db.ref('videochat/bans/' + myId).once('value')).val();
+    } catch (err) {
+      console.error(err);
+      showBlocked('НЕТ СВЯЗИ', 'Не удалось связаться с сервером: ' + (err.message || err), false);
+      return;
+    }
+    $('who-name').textContent = (me.firstName || 'Игрок') + ' · ' + (me.playerId || '');
+    watchSession();
+    if (!me.videochatAccepted) {
+      await showGate();
+      me.videochatAccepted = Date.now();
+    }
+    if (state === 'blocked') return; // пока читали правила, пришла блокировка
+    state = 'lobby';
+    if (!enforceAccess()) {
+      showScreen('screen-lobby');
+      startPreview();
+    }
+  }
+  window.addEventListener('beforeunload', () => { if (myId) { db.ref(Q + myId).remove(); if (curRoomId) db.ref('videochat/rooms/' + curRoomId).remove(); } });
+  boot();
+})();
+</script>
+</body>
+</html>
