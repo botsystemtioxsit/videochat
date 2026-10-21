@@ -178,6 +178,7 @@
       <b>3.</b> Дальше любой участник пишет в группе <b>/call</b> — бот присылает кнопку входа и код комнаты.
     </div>
     <a class="btn" href="https://t.me/troll_battle_Terminal_bot?startgroup=true" target="_blank" rel="noopener" style="text-align:center; text-decoration:none;">Добавить бота в группу</a>
+    <div class="sub" style="font-size:12.5px;">ВидеоЧат в Телеграме: <a href="https://t.me/TIOXSITvoice_chat_bot" target="_blank" rel="noopener" style="color:var(--accent);">@TIOXSITvoice_chat_bot</a> — открывается как приложение, вход по вашему Telegram-аккаунту.</div>
   </div>
 </div>
 
@@ -208,6 +209,7 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
 <script>
 (function () {
@@ -386,6 +388,12 @@
   $('btn-blocked-logout').addEventListener('click', logout);
 
   // ===== аккаунт: та же запись users/<id>, что у игры =====
+  // Анонимный вход — только чтобы привязать владельца НОВОГО профиля (owners/<id> = auth.uid), как это делает игра:
+  // правила потом разрешают менять status/points/stars только этому uid. Не вход «по почте», аккаунтов с паролем нет.
+  // Не вышло (нет сети/SDK) — профиль создаём без привязки, вход не блокируем (как в игре).
+  async function anonymousAuthUid() {
+    try { return (await firebase.auth().signInAnonymously()).user.uid; } catch (err) { console.error('anonymous auth failed:', err); return null; }
+  }
   async function ensureUser(id) {
     const snap = await db.ref('users/' + id).once('value');
     if (snap.exists()) return snap.val();
@@ -397,8 +405,31 @@
       stats: { battles: 0, wins: 0, losses: 0, draws: 0, refereeBattles: 0, audienceLikes: 0 },
       avatarData: null, status: 'active', restrictedUntil: null, createdAt: Date.now()
     };
-    await db.ref('users/' + id).set(fresh);
-    if (tgUser && tgUser.username) db.ref('usernames/' + usernameToKey(tgUser.username)).set(id);
+    // одной атомарной записью, как в игре: иначе между «создали» и «привязали» чужой анонимный вход мог бы занять owners/<id>
+    const authUid = await anonymousAuthUid();
+    const updates = { ['users/' + id]: fresh };
+    if (authUid) updates['owners/' + id] = authUid;
+    try {
+      await db.ref().update(updates);
+    } catch (err) {
+      // отказ: профиль мог только что создать игра, либо остался «хвост» owners/<id> от удалённого профиля (так бывает у гостя,
+      // которого вычистила ночная уборка панели) — тогда гостю просто заводим новый id, а не оставляем его в тупике
+      const again = await db.ref('users/' + id).once('value');
+      if (again.exists()) return again.val();
+      if (/^guest_/.test(id)) {
+        const g = 'guest_' + Math.random().toString(36).slice(2, 9);
+        ls.set('vcGuestId', g);
+        ls.set('battleTelegramId', g);
+        location.reload();
+        return new Promise(() => {});
+      }
+      throw err;
+    }
+    // индекс «@username → id» пишем, только если ключ свободен
+    if (tgUser && tgUser.username) {
+      const ukey = usernameToKey(tgUser.username);
+      if (/^[a-z0-9_]{1,64}$/.test(ukey)) db.ref('usernames/' + ukey).transaction((cur) => (cur === null ? String(id) : undefined), undefined, false).catch(() => {});
+    }
     return fresh;
   }
 
@@ -962,8 +993,13 @@
       myBan = (await db.ref('videochat/bans/' + myId).once('value')).val();
     } catch (err) {
       console.error(err);
-      $('blocked-title').textContent = 'НЕТ СВЯЗИ';
-      $('blocked-text').textContent = 'Не удалось связаться с сервером: ' + (err.message || err);
+      $('blocked-title').textContent = 'НЕ ПОЛУЧИЛОСЬ';
+      $('blocked-text').textContent = 'Не удалось войти: ' + (err.message || err);
+      // выход из тупика: «Повторить» и «Выйти» (сменить аккаунт)
+      $('btn-blocked-back').textContent = 'Повторить';
+      $('btn-blocked-back').style.display = 'block';
+      $('btn-blocked-back').onclick = () => location.reload();
+      $('btn-blocked-logout').style.display = tgUser ? 'none' : 'block';
       showScreen('screen-blocked');
       return;
     }
