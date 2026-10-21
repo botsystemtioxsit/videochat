@@ -209,6 +209,7 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
 <script>
 (function () {
@@ -387,6 +388,12 @@
   $('btn-blocked-logout').addEventListener('click', logout);
 
   // ===== аккаунт: та же запись users/<id>, что у игры =====
+  // Анонимный вход — только чтобы привязать владельца НОВОГО профиля (owners/<id> = auth.uid), как это делает игра:
+  // правила потом разрешают менять status/points/stars только этому uid. Не вход «по почте», аккаунтов с паролем нет.
+  // Не вышло (нет сети/SDK) — профиль создаём без привязки, вход не блокируем (как в игре).
+  async function anonymousAuthUid() {
+    try { return (await firebase.auth().signInAnonymously()).user.uid; } catch (err) { console.error('anonymous auth failed:', err); return null; }
+  }
   async function ensureUser(id) {
     const snap = await db.ref('users/' + id).once('value');
     if (snap.exists()) return snap.val();
@@ -398,8 +405,16 @@
       stats: { battles: 0, wins: 0, losses: 0, draws: 0, refereeBattles: 0, audienceLikes: 0 },
       avatarData: null, status: 'active', restrictedUntil: null, createdAt: Date.now()
     };
-    await db.ref('users/' + id).set(fresh);
-    if (tgUser && tgUser.username) db.ref('usernames/' + usernameToKey(tgUser.username)).set(id);
+    // одной атомарной записью, как в игре: иначе между «создали» и «привязали» чужой анонимный вход мог бы занять owners/<id>
+    const authUid = await anonymousAuthUid();
+    const updates = { ['users/' + id]: fresh };
+    if (authUid) updates['owners/' + id] = authUid;
+    await db.ref().update(updates);
+    // индекс «@username → id» пишем, только если ключ свободен
+    if (tgUser && tgUser.username) {
+      const ukey = usernameToKey(tgUser.username);
+      if (/^[a-z0-9_]{1,64}$/.test(ukey)) db.ref('usernames/' + ukey).transaction((cur) => (cur === null ? String(id) : undefined), undefined, false).catch(() => {});
+    }
     return fresh;
   }
 
