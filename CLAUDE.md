@@ -61,3 +61,6 @@ The owner is non-technical and Russian-speaking (often dictates by voice). Stand
 - **Your own ideas: ask first.** Anything not asked for (extra features, clean-ups, deleting things) is proposed as a short yes/no question before doing it.
 - **Say what limits you**, plainly (cannot see the phone or PC, cannot enable GitHub Pages or set GitHub/Cloudflare secrets, cannot run real video calls from the sandbox).
 - **Write short and plain.** Lead with what happened or what to do; no jargon; one check at a time.
+
+## Главное правило владельца (действует всегда, важнее остальных пунктов выше)
+Владелец сказал раз и навсегда: **не спрашивать разрешения — делать**. Это относится и к своим идеям, и к правкам, и к публикации. Вопрос — только если без ответа физически нельзя продолжить (например, нужен секрет или выбор, который знает только владелец). Не переспрашивать «делать ли?», не просить подтверждений на очевидные шаги.

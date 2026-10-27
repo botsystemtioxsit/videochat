@@ -41,19 +41,13 @@
         "tar.gz"
       ],
       "category": "Network",
-      "icon": "icon.png",
       "artifactName": "${name}-${version}-${arch}.${ext}"
     },
     "win": {
       "target": [
         "nsis"
-      ],
-      "icon": "icon.ico"
+      ]
     },
-    "nsis": {
-      "installerIcon": "icon.ico",
-      "uninstallerIcon": "icon.ico",
-      "installerHeaderIcon": "icon.ico"
-    }
+    "nsis": {}
   }
 }

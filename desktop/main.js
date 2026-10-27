@@ -16,7 +16,6 @@ function createWindow() {
     minWidth: 420,
     minHeight: 600,
     title: 'ВидеоЧат',
-    icon: path.join(__dirname, 'icon.png'),
     autoHideMenuBar: true,
     backgroundColor: '#0B0B0D', // как фон страницы — без белой вспышки при загрузке
     webPreferences: {
