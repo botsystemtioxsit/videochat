@@ -275,6 +275,7 @@
   // ===== кто я =====
   let myId = null;
   let me = null;            // users/<id>
+  let deviceBan = false;    // bannedDevices/<метка этого устройства> есть — устройство заблокировано (бан везде)
   let myBan = null;         // videochat/bans/<id> — запрет на весь видеочат
   const sessionOff = [];
 
@@ -439,6 +440,7 @@
     if (platform.emergency) return { title: 'АВАРИЙНЫЙ РЕЖИМ', text: platform.emergencyMessage || 'Платформа временно закрыта администрацией.', logout: false };
     if (platform.maintenance && !staff) return { title: 'ТЕХРАБОТЫ', text: platform.maintenanceMessage || 'Идут технические работы, зайдите позже.', logout: false };
     if (me && me.status === 'banned') return { title: 'ВЫ ЗАБЛОКИРОВАНЫ', text: 'Аккаунт заблокирован администрацией навсегда.', logout: true };
+    if (deviceBan) return { title: 'ВЫ ЗАБЛОКИРОВАНЫ', text: 'Это устройство заблокировано администрацией навсегда.', logout: true };
     if (me && me.status === 'restricted' && me.restrictedUntil > Date.now()) return { title: 'ДОСТУП ОГРАНИЧЕН', text: 'Доступ ограничен до ' + new Date(me.restrictedUntil).toLocaleString('ru-RU') + '.', logout: true };
     if (myBan && (!myBan.until || myBan.until > Date.now())) {
       return { title: 'ВЫ ЗАБЛОКИРОВАНЫ', text: 'Вы заблокированы в видеочате ' + (myBan.until ? 'до ' + new Date(myBan.until).toLocaleString('ru-RU') : 'навсегда') + (myBan.reason ? '. Причина: ' + myBan.reason : '.'), logout: true };
@@ -984,12 +986,27 @@
   }
 
   // ===== старт =====
+  // Метка устройства — та же, что у игры (общий адрес сайта → общий localStorage); привязывается к аккаунту, а список забаненных читаем по точному ключу.
+  function deviceTag() {
+    try {
+      let t = localStorage.getItem('battleDeviceTag');
+      if (!/^[a-f0-9]{24}$/.test(t || '')) { const a = new Uint8Array(12); crypto.getRandomValues(a); t = Array.from(a, (b) => b.toString(16).padStart(2, '0')).join(''); localStorage.setItem('battleDeviceTag', t); }
+      return t;
+    } catch (e) { return null; }
+  }
+  async function checkDeviceBan(id) {
+    const t = deviceTag();
+    if (!t) return;
+    db.ref('deviceTags/' + id + '/' + t).set(Date.now()).catch(() => {});
+    try { deviceBan = (await db.ref('bannedDevices/' + t).once('value')).exists(); } catch (e) { /* нет связи — не блокируем */ }
+  }
   async function boot() {
     myId = resolveIdentity();
     if (!myId) { showScreen('screen-login'); return; }
     try {
       me = await ensureUser(myId);
       myBan = (await db.ref('videochat/bans/' + myId).once('value')).val();
+      await checkDeviceBan(myId);
     } catch (err) {
       console.error(err);
       $('blocked-title').textContent = 'НЕ ПОЛУЧИЛОСЬ';
